@@ -1,81 +1,182 @@
-# Open Source Doorbell System  
+# Open Source Smart Doorbell System
 
-An open-source DIY **smart doorbell system** that combines audio, video, and networking to create a customizable home doorbell solution.  
-This project is designed to give anyone the ability to build and modify their own doorbell, without being locked into proprietary ecosystems.  
+<img width="1185" height="600" alt="image" src="https://github.com/user-attachments/assets/d1c4d246-bde4-43be-b9dc-80ca0bfbd995" />
 
----
 
-## Features  
-- Live video streaming from the camera  
-- Two-way audio (microphone and speaker)  
-- Loud chime with amplifier and speaker  
-- HDMI display for real-time monitoring  
-- Ethernet connectivity for reliable network access  
-- Runs on a small single-board computer (SBC)  
-- Optional integration with [Home Assistant](https://www.home-assistant.io/) for smart home automation  
+An open-source **DIY smart doorbell and intercom system** built around open protocols and self-hosted services.
+The system provides **one-way video**, **two-way audio**, and **Home Assistant integration**, without relying on proprietary cloud services.
+
+This project is ideal for learning about embedded Linux, streaming media, MQTT, and smart home integration.
 
 ---
 
-## Components  
-All parts can be purchased from common online marketplaces:  
+## System Overview
 
-- [Camera](https://nl.aliexpress.com/item/1005009234829192.html?gatewayAdapt=glo2nld)  
-- [Sound interface](https://nl.aliexpress.com/item/1005006196572718.html?gatewayAdapt=glo2nld)  
-- [Audio amplifier](https://nl.aliexpress.com/item/1005005926858790.html?gatewayAdapt=glo2nld)  
-- [Loudspeaker](https://nl.aliexpress.com/item/32832795528.html?gatewayAdapt=glo2nld)  
-- [Microphone](https://nl.aliexpress.com/item/1005007483195353.html?gatewayAdapt=glo2nld)  
-- [HDMI display](https://nl.aliexpress.com/item/1005009442086364.html?gatewayAdapt=glo2nld)  
-- [Ethernet HAT](https://nl.aliexpress.com/item/1005004437789277.html?gatewayAdapt=glo2nld)  
-- [Single Board Computer](https://nl.aliexpress.com/item/32839074880.html?gatewayAdapt=glo2nld)  
+The system consists of three main parts:
+
+1. **Doorbell (embedded device)**
+2. **Intercom (embedded Linux touchscreen device)**
+3. **Server (Home Assistant + Media + MQTT)**
+
+All communication is done locally using **RTSP/RTP**, **MQTT**, and open-source software.
 
 ---
 
-## Getting Started  
+## Architecture
 
-### Hardware Setup  
-1. Assemble the camera and microphone for input.  
-2. Connect the amplifier and loudspeaker for output.  
-3. Attach the HDMI display to the computer.  
-4. Use the Ethernet HAT to connect the system to your network.  
+### Media Streaming
 
-### Software Setup  
-1. Install an operating system on the SBC (e.g., Raspberry Pi OS, Armbian, or Debian).  
-2. Install the required audio and video packages (`ffmpeg`, `gstreamer`, etc.).  
-3. Configure the camera and microphone drivers.  
-4. Run the provided software to launch the doorbell system.  
+* A central **MediaMTX** server runs on a server.
+* The **doorbell** continuously publishes:
+
+  * A **video stream**
+  * An **audio stream**
+* Both streams are sent to MediaMTX.
+
+Consumers of these streams:
+
+* **Home Assistant** (for live view and automations)
+* **Intercom** (for live video and audio playback)
+
+### Two-Way Audio
+
+* The **intercom** publishes an **audio stream** to MediaMTX.
+* The **doorbell** subscribes to this audio stream.
+* This enables:
+
+  * **Two-way audio**
+  * **One-way video (doorbell → intercom / Home Assistant)**
 
 ---
 
-## Home Assistant Integration  
-This project can integrate seamlessly with [Home Assistant](https://www.home-assistant.io/) to extend functionality:  
+## Home Assistant Integration
 
-- Receive real-time notifications when the doorbell is pressed  
-- View the live camera feed directly from the Home Assistant dashboard  
-- Automate actions (for example, play a sound on smart speakers or turn on lights when someone rings)  
-- Store snapshots or recordings locally or in cloud storage  
+Home Assistant runs on the same server and provides automation and UI features.
 
-A detailed integration guide is available in [`docs/home-assistant.md`](./docs/home-assistant.md).  
+### MQTT (Mosquitto)
 
+* A **Mosquitto MQTT broker** runs inside Home Assistant.
+* The **doorbell** connects to MQTT and publishes events.
+* The doorbell appears as a **device** in Home Assistant.
 
-## Project Structure  
+### Doorbell Events
+
+When the doorbell button is pressed:
+
+* An MQTT event is published
+* Home Assistant can:
+
+  * Trigger the intercom wake-up
+  * Play a sound on the intercom
+  * Send push notifications
+  * Trigger automations (lights, recordings, etc.)
+
+### Day / Night Mode
+
+* Home Assistant publishes the **time-of-day state** (light or dark) via MQTT.
+* The doorbell subscribes to this topic.
+
+LED behavior:
+
+* **Daytime**
+
+  * LED is normally **off**
+  * LED **blinks on press**
+* **Nighttime**
+
+  * LED is normally **on**
+  * LED **blinks off on press**
+
+---
+
+## Doorbell Software
+
+* Fully **custom-written code**
+* Uses:
+
+  * `libgpio` for button and LED control
+  * `paho.mqtt.c` for MQTT communication
+* Responsibilities:
+
+  * Publish button press events
+  * Stream video and audio to MediaMTX
+  * Subscribe to intercom audio stream
+  * React to day/night MQTT topics
+
+---
+
+## Intercom Software
+
+* Runs on **embedded Linux**
+* Uses:
+
+  * `ffmpeg` for media streaming
+  * `lvgl` for the graphical UI
+  * `libgpio` for hardware control
+  * `paho.mqtt.c` for MQTT
+* Video output:
+
+  * Video is written directly to the **Linux framebuffer**
+* Audio:
+
+  * Plays doorbell audio
+  * Publishes microphone audio for two-way communication
+
+### Touchscreen
+
+* Touchscreen is implemented via a **custom device tree overlay**
+* The overlay:
+
+  * Configures the SPI touchscreen device
+  * Loads the correct driver
+* Touch events are read from:
+
+  ```
+  /dev/input/event0
+  ```
+
+---
+
+## Features
+
+* One-way video (doorbell → intercom / Home Assistant)
+* Two-way audio communication
+* Local media streaming via MediaMTX
+* MQTT-based event system
+* Home Assistant device & automations
+* Day/night LED behavior
+* Fully self-hosted and cloud-free
+* Open-source and extensible
+
+---
+
+## Components
+
+All parts can be purchased from common online marketplaces:
+
+* [Camera](https://nl.aliexpress.com/item/1005009234829192.html?gatewayAdapt=glo2nld)
+* [Sound interface](https://nl.aliexpress.com/item/1005006196572718.html?gatewayAdapt=glo2nld)
+* [Audio amplifier](https://nl.aliexpress.com/item/1005005926858790.html?gatewayAdapt=glo2nld)
+* [Loudspeaker](https://nl.aliexpress.com/item/32832795528.html?gatewayAdapt=glo2nld)
+* [Microphone](https://nl.aliexpress.com/item/1005007483195353.html?gatewayAdapt=glo2nld)
+* [HDMI display](https://nl.aliexpress.com/item/1005009442086364.html?gatewayAdapt=glo2nld)
+* [Ethernet HAT](https://nl.aliexpress.com/item/1005004437789277.html?gatewayAdapt=glo2nld)
+* [Single Board Computer](https://nl.aliexpress.com/item/32839074880.html?gatewayAdapt=glo2nld)
+
+---
+
+## Project Structure
 
 ```
 /doorbell-system
-│── docs/ # Documentation and diagrams
-│ └── home-assistant.md # Home Assistant integration guide
-│── hardware/ # Schematics and wiring
-│── software/ # Source code
-│── configs/ # Configuration files
-│── README.md # This file
+│── docs/                  # Documentation and diagrams
+│ └── home-assistant.md    # Home Assistant & MQTT setup
+│── hardware/              # Schematics and wiring
+│── software/
+│ ├── doorbell/            # Doorbell source code
+│ └── intercom/            # Intercom source code
+│── configs/               # MediaMTX, MQTT, HA configs
+│── README.md              # This file
 ```
 
-## Contributing  
-This is an open-source project—contributions are welcome!  
-- Report issues  
-- Suggest improvements  
-- Submit pull requests  
-
-
-
-## License  
-This project is licensed under the **MIT License**.  
+---
